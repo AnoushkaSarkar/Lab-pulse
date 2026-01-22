@@ -1,80 +1,207 @@
-import { initializeApp } from 'firebase/app';
-import { getDatabase, ref, set, push, onValue, update, get } from 'firebase/database';
+import { createClient } from '@supabase/supabase-js';
 
-// 🔥 REPLACE THIS WITH YOUR FIREBASE CONFIG
-// Go to: https://console.firebase.google.com
-const firebaseConfig = {
-    apiKey: "YOUR_API_KEY_HERE",
-    authDomain: "YOUR_PROJECT.firebaseapp.com",
-    databaseURL: "https://YOUR_PROJECT.firebaseio.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_PROJECT.appspot.com",
-    messagingSenderId: "YOUR_SENDER_ID",
-    appId: "YOUR_APP_ID"
+const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
+const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Missing Supabase environment variables. Set REACT_APP_SUPABASE_URL and REACT_APP_SUPABASE_ANON_KEY.');
+}
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+const generateSessionCode = (length = 8) => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let result = '';
+    for (let i = 0; i < length; i += 1) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
 };
 
-const app = initializeApp(firebaseConfig);
-export const db = getDatabase(app);
+const fetchStudentsWithSubmissions = async (sessionId) => {
+    const { data: studentsData, error: studentsError } = await supabase
+        .from('students')
+        .select('*')
+        .eq('session_id', sessionId);
 
-// Create new session
-export const createSession = async (sessionData) => {
-    const sessionRef = push(ref(db, 'sessions'));
-    const sessionId = sessionRef.key;
+    if (studentsError) {
+        throw studentsError;
+    }
 
-    await set(sessionRef, {
-        ...sessionData,
-        sessionId,
-        createdAt: Date.now(),
-        isActive: true
+    const { data: submissionsData, error: submissionsError } = await supabase
+        .from('submissions')
+        .select('*')
+        .eq('session_id', sessionId);
+
+    if (submissionsError) {
+        throw submissionsError;
+    }
+
+    const studentsMap = {};
+
+    (studentsData || []).forEach((student) => {
+        studentsMap[student.roll_no] = {
+            name: student.name,
+            rollNo: student.roll_no,
+            taskStatus: student.task_status || {},
+            submissions: {}
+        };
     });
+
+    (submissionsData || []).forEach((submission) => {
+        const student = studentsMap[submission.roll_no] || {};
+        student.submissions = student.submissions || {};
+        student.submissions[submission.task_idx] = {
+            code: submission.code,
+            output: submission.output,
+            timestamp: submission.created_at || submission.timestamp
+        };
+        studentsMap[submission.roll_no] = student;
+    });
+
+    return studentsMap;
+};
+
+export const createSession = async (sessionData) => {
+    const sessionId = generateSessionCode();
+
+    const { error } = await supabase.from('sessions').insert({
+        id: sessionId,
+        name: sessionData.name,
+        tasks: sessionData.tasks || [],
+        is_active: true
+    });
+
+    if (error) {
+        throw error;
+    }
 
     return sessionId;
 };
 
-// Join session as student
+export const getSession = async (sessionId) => {
+    const { data, error } = await supabase
+        .from('sessions')
+        .select('*')
+        .eq('id', sessionId)
+        .single();
+
+    if (error && error.code === 'PGRST116') {
+        return null;
+    }
+
+    if (error) {
+        throw error;
+    }
+
+    return data;
+};
+
 export const joinSession = async (sessionId, studentData) => {
-    const studentRef = ref(db, `students/${sessionId}/${studentData.rollNo}`);
     const session = await getSession(sessionId);
+    if (!session) {
+        throw new Error('Session not found');
+    }
 
     const taskStatus = {};
-    session.tasks.forEach((_, index) => {
+    (session.tasks || []).forEach((_, index) => {
         taskStatus[index] = 'not-started';
     });
 
-    await set(studentRef, {
-        name: studentData.name,
-        rollNo: studentData.rollNo,
-        taskStatus,
-        joinedAt: Date.now()
-    });
+    const { error } = await supabase
+        .from('students')
+        .upsert(
+            {
+                session_id: sessionId,
+                name: studentData.name,
+                roll_no: studentData.rollNo,
+                task_status: taskStatus
+            },
+            { onConflict: 'session_id,roll_no' }
+        );
+
+    if (error) {
+        throw error;
+    }
 
     localStorage.setItem(`student_${sessionId}`, JSON.stringify(studentData));
-
     return true;
 };
 
-// Submit task
 export const submitTask = async (sessionId, rollNo, taskIndex, submission) => {
-    const updates = {};
-    updates[`students/${sessionId}/${rollNo}/submissions/${taskIndex}`] = {
-        ...submission,
-        timestamp: Date.now()
+    const timestamp = new Date().toISOString();
+
+    const { data: student, error: studentError } = await supabase
+        .from('students')
+        .select('task_status')
+        .eq('session_id', sessionId)
+        .eq('roll_no', rollNo)
+        .single();
+
+    if (studentError) {
+        throw studentError;
+    }
+
+    const updatedTaskStatus = {
+        ...(student?.task_status || {}),
+        [taskIndex]: 'completed'
     };
-    updates[`students/${sessionId}/${rollNo}/taskStatus/${taskIndex}`] = 'completed';
 
-    await update(ref(db), updates);
+    const { error: submissionError } = await supabase.from('submissions').upsert(
+        {
+            session_id: sessionId,
+            roll_no: rollNo,
+            task_idx: taskIndex,
+            code: submission.code,
+            output: submission.output,
+            timestamp
+        },
+        { onConflict: 'session_id,roll_no,task_idx' }
+    );
+
+    if (submissionError) {
+        throw submissionError;
+    }
+
+    const { error: statusError } = await supabase
+        .from('students')
+        .update({ task_status: updatedTaskStatus })
+        .eq('session_id', sessionId)
+        .eq('roll_no', rollNo);
+
+    if (statusError) {
+        throw statusError;
+    }
 };
 
-// Listen to real-time updates
 export const listenToStudents = (sessionId, callback) => {
-    const studentsRef = ref(db, `students/${sessionId}`);
-    return onValue(studentsRef, (snapshot) => {
-        callback(snapshot.val() || {});
-    });
-};
+    let active = true;
 
-// Get session details
-export const getSession = async (sessionId) => {
-    const snapshot = await get(ref(db, `sessions/${sessionId}`));
-    return snapshot.val();
+    const refresh = async () => {
+        const data = await fetchStudentsWithSubmissions(sessionId);
+        if (active) {
+            callback(data);
+        }
+    };
+
+    refresh();
+
+    const channel = supabase
+        .channel(`session-${sessionId}`)
+        .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'students', filter: `session_id=eq.${sessionId}` },
+            refresh
+        )
+        .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'submissions', filter: `session_id=eq.${sessionId}` },
+            refresh
+        )
+        .subscribe();
+
+    return () => {
+        active = false;
+        supabase.removeChannel(channel);
+    };
 };

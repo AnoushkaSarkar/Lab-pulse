@@ -1,70 +1,72 @@
-# Getting Started with Create React App
+# Lab Pulse
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Realtime lab monitoring for faculty and students. Faculty create a session with tasks; students join, submit code/output per task, and dashboards update live.
 
-## Available Scripts
+## Prerequisites
+- Node 18+
+- Supabase project (for data + realtime)
 
-In the project directory, you can run:
+## Environment
+Create `.env.local` in the project root (CRA requires the `REACT_APP_` prefix):
+```
+REACT_APP_SUPABASE_URL=your-supabase-url
+REACT_APP_SUPABASE_ANON_KEY=your-anon-public-key
+```
+See `env.example` for a template.
 
-### `npm start`
+## Supabase schema (SQL)
+Run this in the Supabase SQL editor:
+```sql
+create table public.sessions (
+  id text primary key,
+  name text not null,
+  tasks jsonb not null default '[]'::jsonb,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now()
+);
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+create table public.students (
+  id bigserial primary key,
+  session_id text references public.sessions(id) on delete cascade,
+  roll_no text not null,
+  name text not null,
+  task_status jsonb not null default '{}'::jsonb,
+  unique (session_id, roll_no)
+);
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+create table public.submissions (
+  id bigserial primary key,
+  session_id text references public.sessions(id) on delete cascade,
+  roll_no text not null,
+  task_idx integer not null,
+  code text,
+  output text,
+  timestamp timestamptz not null default now(),
+  unique (session_id, roll_no, task_idx)
+);
 
-### `npm test`
+-- Enable realtime
+alter publication supabase_realtime add table public.students;
+alter publication supabase_realtime add table public.submissions;
+```
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+## Run locally
+```
+npm install
+npm start
+```
+The app runs at http://localhost:3000.
 
-### `npm run build`
+## Deploy to Vercel
+1) Push this repo or import it into Vercel.  
+2) Set env vars in Vercel Project Settings → Environment Variables:
+   - `REACT_APP_SUPABASE_URL`
+   - `REACT_APP_SUPABASE_ANON_KEY`
+3) Build command: `npm run build` (default for CRA)  
+   Output directory: `build`
+4) Redeploy. Vercel will inject env vars at build time.
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
-
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
-
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
-
-### `npm run eject`
-
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
-
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+## Scripts
+- `npm start` – dev server
+- `npm run build` – production build
+- `npm test` – tests (CRA defaults)
