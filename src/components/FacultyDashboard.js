@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { auth } from '../firebase';
-import { databaseService } from '../services/databaseService';
-import { Monitor, Users, CheckCircle, Clock, AlertCircle, LogOut } from 'lucide-react';
+import { Monitor, Users, CheckCircle, Clock, AlertCircle } from 'lucide-react';
 
 const FacultyDashboard = () => {
   const [labData, setLabData] = useState(null);
@@ -11,26 +9,72 @@ const FacultyDashboard = () => {
   const [selectedTask, setSelectedTask] = useState(null);
 
   useEffect(() => {
-    const initializeDemo = async () => {
-      const labId = await databaseService.initializeDemoData();
-      
-      // Get lab data
-      databaseService.getLabData(labId, (data) => {
-        setLabData(data);
-      });
-
-      // Get status updates
-      databaseService.getStatusUpdates(labId, (data) => {
-        setStatusData(data || {});
-      });
-
-      // Get submissions
-      databaseService.getSubmissions(labId, (data) => {
-        setSubmissions(data || {});
-      });
+    // Initialize with demo data immediately without Firebase
+    const demoData = {
+      name: 'Introduction to React',
+      description: 'Basic React concepts and components',
+      students: {
+        'student-1': { name: 'Alice Johnson', email: 'alice@university.edu' },
+        'student-2': { name: 'Bob Smith', email: 'bob@university.edu' },
+        'student-3': { name: 'Charlie Brown', email: 'charlie@university.edu' },
+        'student-4': { name: 'Diana Prince', email: 'diana@university.edu' },
+        'student-5': { name: 'Eve Wilson', email: 'eve@university.edu' }
+      },
+      tasks: {
+        'task-1': { 
+          title: 'Setup React Environment', 
+          description: 'Create a new React application using create-react-app',
+          difficulty: 'Easy'
+        },
+        'task-2': { 
+          title: 'Create Component', 
+          description: 'Build a reusable Button component with props',
+          difficulty: 'Easy'
+        },
+        'task-3': { 
+          title: 'State Management', 
+          description: 'Implement useState hook for form handling',
+          difficulty: 'Medium'
+        },
+        'task-4': { 
+          title: 'API Integration', 
+          description: 'Fetch data from a public API and display it',
+          difficulty: 'Medium'
+        },
+        'task-5': { 
+          title: 'Final Project', 
+          description: 'Build a complete todo application',
+          difficulty: 'Hard'
+        }
+      }
     };
-
-    initializeDemo();
+    
+    setLabData(demoData);
+    
+    // Simulate some demo status data
+    const demoStatus = {
+      'student-1': {
+        'task-1': { status: 'completed', updatedAt: new Date().toISOString() },
+        'task-2': { status: 'in-progress', updatedAt: new Date().toISOString() }
+      },
+      'student-2': {
+        'task-1': { status: 'completed', updatedAt: new Date().toISOString() }
+      }
+    };
+    setStatusData(demoStatus);
+    
+    // Simulate some demo submissions
+    const demoSubmissions = {
+      'student-1': {
+        'task-1': {
+          code: 'function App() {\n  return <div>Hello World</div>;\n}',
+          output: 'Hello World',
+          submittedAt: new Date().toISOString(),
+          status: 'completed'
+        }
+      }
+    };
+    setSubmissions(demoSubmissions);
   }, []);
 
   const getStatusColor = (status) => {
@@ -53,10 +97,6 @@ const FacultyDashboard = () => {
       default:
         return <AlertCircle className="w-4 h-4" />;
     }
-  };
-
-  const handleLogout = async () => {
-    await auth.signOut();
   };
 
   if (!labData) {
@@ -86,13 +126,6 @@ const FacultyDashboard = () => {
                 <p className="text-sm text-gray-500">{labData.name}</p>
               </div>
             </div>
-            <button
-              onClick={handleLogout}
-              className="flex items-center text-gray-600 hover:text-gray-900 transition-colors"
-            >
-              <LogOut className="w-5 h-5 mr-2" />
-              Logout
-            </button>
           </div>
         </div>
       </header>

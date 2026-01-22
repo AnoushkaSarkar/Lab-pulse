@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { auth } from '../firebase';
-import { databaseService } from '../services/databaseService';
-import { Code, Send, CheckCircle, Clock, AlertCircle, LogOut, BookOpen } from 'lucide-react';
+import { Code, Send, CheckCircle, Clock, AlertCircle, BookOpen } from 'lucide-react';
 
 const StudentInterface = () => {
   const [labData, setLabData] = useState(null);
@@ -12,21 +10,56 @@ const StudentInterface = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    const initializeDemo = async () => {
-      const labId = await databaseService.initializeDemoData();
-      
-      // Get lab data
-      databaseService.getLabData(labId, (data) => {
-        setLabData(data);
-      });
-
-      // Get status updates
-      databaseService.getStatusUpdates(labId, (data) => {
-        setStatusData(data || {});
-      });
+    // Initialize with demo data immediately without Firebase
+    const demoData = {
+      name: 'Introduction to React',
+      description: 'Basic React concepts and components',
+      students: {
+        'student-1': { name: 'Alice Johnson', email: 'alice@university.edu' },
+        'student-2': { name: 'Bob Smith', email: 'bob@university.edu' },
+        'student-3': { name: 'Charlie Brown', email: 'charlie@university.edu' },
+        'student-4': { name: 'Diana Prince', email: 'diana@university.edu' },
+        'student-5': { name: 'Eve Wilson', email: 'eve@university.edu' }
+      },
+      tasks: {
+        'task-1': { 
+          title: 'Setup React Environment', 
+          description: 'Create a new React application using create-react-app',
+          difficulty: 'Easy'
+        },
+        'task-2': { 
+          title: 'Create Component', 
+          description: 'Build a reusable Button component with props',
+          difficulty: 'Easy'
+        },
+        'task-3': { 
+          title: 'State Management', 
+          description: 'Implement useState hook for form handling',
+          difficulty: 'Medium'
+        },
+        'task-4': { 
+          title: 'API Integration', 
+          description: 'Fetch data from a public API and display it',
+          difficulty: 'Medium'
+        },
+        'task-5': { 
+          title: 'Final Project', 
+          description: 'Build a complete todo application',
+          difficulty: 'Hard'
+        }
+      }
     };
-
-    initializeDemo();
+    
+    setLabData(demoData);
+    
+    // Simulate some demo status data
+    const demoStatus = {
+      'student-1': {
+        'task-1': { status: 'completed', updatedAt: new Date().toISOString() },
+        'task-2': { status: 'in-progress', updatedAt: new Date().toISOString() }
+      }
+    };
+    setStatusData(demoStatus);
   }, []);
 
   const handleTaskSelect = (task) => {
@@ -41,31 +74,34 @@ const StudentInterface = () => {
     setIsSubmitting(true);
     
     try {
-      const labId = 'demo-lab-1';
-      const studentId = 'student-1'; // In real app, get from auth
+      // Simulate submission without Firebase
+      console.log('Submitting task:', selectedTask.title);
+      console.log('Code:', code);
+      console.log('Output:', output);
       
-      // Update task status to in-progress
-      await databaseService.updateTaskStatus(labId, studentId, selectedTask.id, 'in-progress');
-      
-      // Submit work
-      await databaseService.submitWork(labId, studentId, selectedTask.id, {
-        code,
-        output
-      });
+      // Update local status to simulate completion
+      setStatusData(prev => ({
+        ...prev,
+        'student-1': {
+          ...prev['student-1'],
+          [selectedTask.id]: {
+            status: 'completed',
+            updatedAt: new Date().toISOString()
+          }
+        }
+      }));
       
       // Clear form
       setCode('');
       setOutput('');
       setSelectedTask(null);
+      
+      alert('Task submitted successfully!');
     } catch (error) {
       console.error('Error submitting work:', error);
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const handleLogout = async () => {
-    await auth.signOut();
   };
 
   const getStatusIcon = (taskId) => {
@@ -106,16 +142,6 @@ const StudentInterface = () => {
                 <h1 className="text-xl font-semibold text-gray-900">Lab Pulse</h1>
                 <p className="text-sm text-gray-500">{labData.name}</p>
               </div>
-            </div>
-            <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-600">Welcome, {studentName}</span>
-              <button
-                onClick={handleLogout}
-                className="flex items-center text-gray-600 hover:text-gray-900 transition-colors"
-              >
-                <LogOut className="w-5 h-5 mr-2" />
-                Logout
-              </button>
             </div>
           </div>
         </div>
